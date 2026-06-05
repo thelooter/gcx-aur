@@ -1,0 +1,18 @@
+pkgbase = gcx-bin
+	pkgdesc = A CLI for managing Grafana Cloud resources, optimized for agentic usage (prebuilt binary)
+	pkgver = 0.4.0
+	pkgrel = 1
+	url = https://github.com/grafana/gcx
+	arch = x86_64
+	arch = aarch64
+	license = Apache-2.0
+	provides = gcx
+	conflicts = gcx
+	options = !strip
+	options = !debug
+	source_x86_64 = gcx-bin-0.4.0-x86_64.tar.gz::https://github.com/grafana/gcx/releases/download/v0.4.0/gcx_0.4.0_linux_amd64.tar.gz
+	sha256sums_x86_64 = 254a69363fa0e85a89d561bb5d7bfb475c3dd06518e2ac7a5cec7cdf441344d9
+	source_aarch64 = gcx-bin-0.4.0-aarch64.tar.gz::https://github.com/grafana/gcx/releases/download/v0.4.0/gcx_0.4.0_linux_arm64.tar.gz
+	sha256sums_aarch64 = 51267185c8a907da0b6e683a51cc430abb4724484c61734dcfbaf493d1288a3d
+
+pkgname = gcx-bin

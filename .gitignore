@@ -1,0 +1,11 @@
+# makepkg build artifacts (each package also carries its own .gitignore)
+*/src/
+*/pkg/
+*/gopath/
+*.pkg.tar.zst
+*.pkg.tar.xz
+*/*.tar.gz
+
+# local secrets / scratch
+*.key
+.env
