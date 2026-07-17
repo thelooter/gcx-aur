@@ -41,9 +41,13 @@ jobs:
         run: dagger develop
 
       - name: Configure git identity
+        # --global so the identity also applies to the throwaway AUR clones that
+        # scripts/aur-sync.sh makes in temp dirs (a repo-local config would only
+        # cover this workspace, and the AUR commits would fail with "empty ident
+        # name"). It still covers the workspace commit below via the global fallback.
         run: |
-          git config user.name  'thelooter'
-          git config user.email 'evekolb2204@gmail.com'
+          git config --global user.name  'thelooter'
+          git config --global user.email 'evekolb2204@gmail.com'
 
       - name: Update release-tracking packages
         env:
