@@ -56,8 +56,21 @@ for pkg in "${packages[@]}"; do
 		ver="$(awk -F= '/^pkgver=/{print $2; exit}' PKGBUILD)"
 		rel="$(awk -F= '/^pkgrel=/{print $2; exit}' PKGBUILD)"
 		git commit --quiet -m "upgpkg: ${pkg} ${ver}-${rel}"
-		git push origin master
-		echo "${pkg}: pushed ${ver}-${rel} to the AUR"
+		# Push to the AUR's canonical `master` branch regardless of the local
+		# branch name — a freshly cloned *empty* repo checks out the client's
+		# default branch (often `main`), so `git push origin master` would fail
+		# with "src refspec master does not match any". HEAD:master sidesteps it.
+		#
+		# Guard the success message on the push: this subshell runs with `set -e`
+		# effectively disabled (it sits on the left of `|| failed=1`), so a bare
+		# `git push` failure would otherwise fall through to the success echo and
+		# report a publish that never happened.
+		if git push origin HEAD:master; then
+			echo "${pkg}: pushed ${ver}-${rel} to the AUR"
+		else
+			echo "::error title=${pkg}::AUR push failed"
+			exit 1
+		fi
 	) || failed=1
 
 	rm -rf "${work}"
