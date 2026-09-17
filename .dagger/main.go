@@ -73,9 +73,17 @@ func (m *Aur) LatestRelease(
 	return strings.TrimPrefix(strings.TrimSpace(out), "v"), nil
 }
 
-// pkgverRe tolerates the quoting/spacing/comment styles makepkg accepts
+// pkgField extracts a scalar PKGBUILD variable (pkgver, pkgrel, ...),
+// tolerating the quoting/spacing/comment styles makepkg accepts
 // (e.g. `pkgver=1.3.0`, `pkgver="1.3.0"`, `pkgver='1.3.0' # comment`).
-var pkgverRe = regexp.MustCompile(`(?m)^\s*pkgver\s*=\s*['"]?([^'"\s#]+)['"]?`)
+func pkgField(content, name string) (string, error) {
+	re := regexp.MustCompile(`(?m)^\s*` + name + `\s*=\s*['"]?([^'"\s#]+)['"]?`)
+	match := re.FindStringSubmatch(content)
+	if match == nil {
+		return "", fmt.Errorf("no %s= line found in PKGBUILD", name)
+	}
+	return strings.TrimSpace(match[1]), nil
+}
 
 // CurrentPkgver reads the pkgver currently declared in a package's PKGBUILD.
 func (m *Aur) CurrentPkgver(ctx context.Context, src *dagger.Directory, pkg string) (string, error) {
@@ -83,11 +91,44 @@ func (m *Aur) CurrentPkgver(ctx context.Context, src *dagger.Directory, pkg stri
 	if err != nil {
 		return "", err
 	}
-	match := pkgverRe.FindStringSubmatch(content)
-	if match == nil {
-		return "", fmt.Errorf("no pkgver= line found in %s/PKGBUILD", pkg)
+	ver, err := pkgField(content, "pkgver")
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", pkg, err)
 	}
-	return strings.TrimSpace(match[1]), nil
+	return ver, nil
+}
+
+// CommitMessage builds the CI commit message for a comma-separated list of
+// changed packages (e.g. "gcx,gcx-bin"), reading each version straight from
+// its working-tree PKGBUILD: "ci: update gcx packages (gcx 1.4.0-1)".
+// Old versions are deliberately absent — the CI runner owns git state (it
+// knows what changed); this function owns parsing and formatting, which is
+// where the quoting/comment edge cases live and where unit tests can reach.
+func (m *Aur) CommitMessage(ctx context.Context, src *dagger.Directory, pkgs string) (string, error) {
+	parts := []string{}
+	for _, pkg := range strings.Split(pkgs, ",") {
+		pkg = strings.TrimSpace(pkg)
+		if pkg == "" {
+			continue
+		}
+		content, err := src.File(pkg + "/PKGBUILD").Contents(ctx)
+		if err != nil {
+			return "", err
+		}
+		ver, err := pkgField(content, "pkgver")
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", pkg, err)
+		}
+		rel, err := pkgField(content, "pkgrel")
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", pkg, err)
+		}
+		parts = append(parts, fmt.Sprintf("%s %s-%s", pkg, ver, rel))
+	}
+	if len(parts) == 0 {
+		return "", fmt.Errorf("no packages given (expected e.g. %q)", "gcx,gcx-bin")
+	}
+	return fmt.Sprintf("ci: update gcx packages (%s)", strings.Join(parts, ", ")), nil
 }
 
 // Build runs `makepkg` for one package in a clean Arch container, installing
