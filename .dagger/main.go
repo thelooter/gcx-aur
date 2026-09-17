@@ -73,13 +73,17 @@ func (m *Aur) LatestRelease(
 	return strings.TrimPrefix(strings.TrimSpace(out), "v"), nil
 }
 
+// pkgverRe tolerates the quoting/spacing/comment styles makepkg accepts
+// (e.g. `pkgver=1.3.0`, `pkgver="1.3.0"`, `pkgver='1.3.0' # comment`).
+var pkgverRe = regexp.MustCompile(`(?m)^\s*pkgver\s*=\s*['"]?([^'"\s#]+)['"]?`)
+
 // CurrentPkgver reads the pkgver currently declared in a package's PKGBUILD.
 func (m *Aur) CurrentPkgver(ctx context.Context, src *dagger.Directory, pkg string) (string, error) {
 	content, err := src.File(pkg + "/PKGBUILD").Contents(ctx)
 	if err != nil {
 		return "", err
 	}
-	match := regexp.MustCompile(`(?m)^pkgver=(.+)$`).FindStringSubmatch(content)
+	match := pkgverRe.FindStringSubmatch(content)
 	if match == nil {
 		return "", fmt.Errorf("no pkgver= line found in %s/PKGBUILD", pkg)
 	}
@@ -106,8 +110,8 @@ func (m *Aur) Bump(
 ) (*dagger.Directory, error) {
 	c := m.pkgDir(src, pkg).
 		WithExec([]string{"sed", "-i",
-			"-e", fmt.Sprintf("s/^pkgver=.*/pkgver=%s/", version),
-			"-e", "s/^pkgrel=.*/pkgrel=1/",
+			"-e", fmt.Sprintf("s/^[[:space:]]*pkgver[[:space:]]*=.*/pkgver=%s/", version),
+			"-e", "s/^[[:space:]]*pkgrel[[:space:]]*=.*/pkgrel=1/",
 			"PKGBUILD"})
 
 	switch pkg {
