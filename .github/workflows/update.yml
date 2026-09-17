@@ -37,6 +37,18 @@ jobs:
             | DAGGER_VERSION="${DAGGER_VERSION}" BIN_DIR=/usr/local/bin sudo -E sh
           dagger version
 
+      - name: Check Dagger version pin
+        # dagger.json engineVersion and the DAGGER_VERSION env must match —
+        # otherwise `dagger develop` silently reconciles the module and CI
+        # runs a different engine than a local checkout.
+        run: |
+          pinned="$(jq -r .engineVersion dagger.json)"
+          if [[ "${pinned}" != "${DAGGER_VERSION}" ]]; then
+            echo "::error title=dagger::dagger.json engineVersion (${pinned}) != DAGGER_VERSION (${DAGGER_VERSION})"
+            exit 1
+          fi
+          echo "Dagger pin in sync: ${pinned}"
+
       - name: Generate module bindings
         run: dagger develop
 
