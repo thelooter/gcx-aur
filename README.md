@@ -14,9 +14,10 @@ automatically.
 | `gcx-bin/` | `gcx-bin` | Installs the official prebuilt release binary (no compilation)         |
 | `gcx-git/` | `gcx-git` | Builds the **`main` branch** from git (VCS package)                    |
 
-All three install the binary to `/usr/bin/gcx`, declare `provides=('gcx')` /
-`conflicts=('gcx')` (so only one may be installed at a time), and ship the
-Apache-2.0 license and upstream docs.
+All three install the binary to `/usr/bin/gcx`. The `gcx-bin` and `gcx-git`
+variants declare `provides` / `conflicts=('gcx')` (so only one may be
+installed at a time — `gcx-bin` pins it as `provides=("gcx=${pkgver}")`); the `gcx` package itself needs neither, since it *is*
+`gcx`. All three ship the Apache-2.0 license and upstream docs.
 
 ### Shell completions
 
