@@ -66,9 +66,12 @@ check() {
 	# NOTE: the $(...) is deliberately unquoted so each package becomes its
 	# own argument to `go test`.
 	go test $(go list ./... | grep -v '/cmd/gcx/root$')
-
 	# Smoke-test the binary: it must run and report the version we injected.
-	./build/gcx version | grep -q "\"version\":\"v$pkgver\""
+	# -o json is pinned deliberately: the default format is environment-
+	# dependent (agent mode flips it to a JSON envelope, human mode renders
+	# a text table), so grepping the default output would pass in one place
+	# and fail in another. Explicit JSON is identical everywhere.
+	./build/gcx version -o json | grep -q "\"version\": \"v$pkgver\""
 }
 
 package() {

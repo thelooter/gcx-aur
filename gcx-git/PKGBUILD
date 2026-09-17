@@ -74,8 +74,9 @@ check() {
 	# (If upstream main is red, this fails — that is the point of a VCS package.)
 	go test ./...
 
-	# The binary must report the exact revision it was built from.
-	./build/gcx version | grep -q "$(git rev-parse HEAD)"
+	# The binary must report the exact revision it was built from. -o json is
+	# pinned: the default format depends on the environment (see gcx).
+	./build/gcx version -o json | grep -q "$(git rev-parse HEAD)"
 }
 
 package() {
