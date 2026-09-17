@@ -27,7 +27,7 @@ permissions:
 env:
   # Keep this in sync with engineVersion in dagger.json. `dagger develop`
   # reconciles the module to whichever CLI version is installed here.
-  DAGGER_VERSION: v0.21.0
+  DAGGER_VERSION: v0.21.9
 
 jobs:
   update:

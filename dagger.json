@@ -1,6 +1,6 @@
 {
   "name": "aur",
-  "engineVersion": "v0.21.0",
+  "engineVersion": "v0.21.9",
   "sdk": {
     "source": "go"
   },
