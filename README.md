@@ -101,8 +101,9 @@ rate limit for the release check. Note the workflow has **no `push` trigger** â€
 runs only on schedule and manual dispatch.
 
 Pin the Dagger version in two places that must match: `engineVersion` in
-`dagger.json` and `DAGGER_VERSION` in the workflow. `dagger develop` reconciles
-the module to whichever CLI is installed.
+`dagger.json` and `DAGGER_VERSION` in the workflow (CI installs exactly that
+via the pinned `dagger/dagger-for-github` action â€” no curl-piped-to-sudo).
+`dagger develop` reconciles the module to whichever CLI is installed.
 
 ## Manual use
 
