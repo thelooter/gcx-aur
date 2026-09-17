@@ -65,7 +65,17 @@ build() {
 
 check() {
 	cd "$pkgname"
-	./build/gcx version >/dev/null
+
+	export GOPATH="$srcdir/gopath"
+	export GOFLAGS='-mod=readonly -modcacherw'
+
+	# Full unit suite: unlike the release tarball, the git checkout has the
+	# .git metadata the skills-drift test needs, so nothing is excluded.
+	# (If upstream main is red, this fails — that is the point of a VCS package.)
+	go test ./...
+
+	# The binary must report the exact revision it was built from.
+	./build/gcx version | grep -q "$(git rev-parse HEAD)"
 }
 
 package() {

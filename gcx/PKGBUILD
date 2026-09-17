@@ -56,8 +56,19 @@ build() {
 check() {
 	cd "$pkgname-$pkgver"
 
+	export GOPATH="$srcdir/gopath"
+	export GOFLAGS='-mod=readonly -modcacherw'
+
+	# Upstream's full unit suite. cmd/gcx/root is excluded: its skills-drift
+	# test shells out to `git ls-files`, which needs a git checkout the
+	# release tarball doesn't have (verified: the only failure, and only for
+	# that reason). The root command is still covered by the smoke test below.
+	# NOTE: the $(...) is deliberately unquoted so each package becomes its
+	# own argument to `go test`.
+	go test $(go list ./... | grep -v '/cmd/gcx/root$')
+
 	# Smoke-test the binary: it must run and report the version we injected.
-	./build/gcx version | grep -q "v$pkgver"
+	./build/gcx version | grep -q "\"version\":\"v$pkgver\""
 }
 
 package() {
