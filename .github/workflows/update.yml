@@ -53,7 +53,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          status=0
+          # Each package is updated independently: a failed verification build
+          # for one must not block committing/publishing the other. So this
+          # step always exits 0 and records failures in the environment for a
+          # final gate step after the commit/publish stages.
+          failed_pkgs=""
           for pkg in gcx gcx-bin; do
             echo "::group::update ${pkg}"
             if dagger call update \
@@ -62,16 +66,24 @@ jobs:
               echo "${pkg}: ok"
             else
               echo "::error title=${pkg}::update/verification build failed"
-              status=1
+              failed_pkgs="${failed_pkgs} ${pkg}"
             fi
             echo "::endgroup::"
           done
-          exit "${status}"
+          if [[ -n "${failed_pkgs}" ]]; then
+            echo "UPDATE_FAILED_PKGS=${failed_pkgs}" >> "${GITHUB_ENV}"
+            echo "::warning title=update::packages failed:${failed_pkgs} — continuing so successful bumps can still be committed"
+          fi
 
       - name: Build-check the VCS package
         run: |
           echo "::group::build gcx-git"
-          dagger call build --src=. --pkg=gcx-git
+          # A broken -git build must not block publishing successful release
+          # bumps either, so record the failure and keep going.
+          if ! dagger call build --src=. --pkg=gcx-git; then
+            echo "::error title=gcx-git::build-check failed"
+            echo "GIT_CHECK_FAILED=1" >> "${GITHUB_ENV}"
+          fi
           echo "::endgroup::"
 
       - name: Commit version bumps
@@ -112,3 +124,20 @@ jobs:
         if: vars.AUR_PUBLISH != 'true'
         run: |
           echo "::notice title=AUR::Skipped AUR push — set repository variable AUR_PUBLISH=true to enable."
+
+      # Fail the run *after* successful bumps have been committed/published,
+      # so one broken package never silences the failure, but never blocks
+      # the healthy package either.
+      - name: Report package failures
+        if: always()
+        run: |
+          failed=0
+          if [[ -n "${UPDATE_FAILED_PKGS:-}" ]]; then
+            echo "::error title=update::packages failed:${UPDATE_FAILED_PKGS}"
+            failed=1
+          fi
+          if [[ -n "${GIT_CHECK_FAILED:-}" ]]; then
+            echo "::error title=gcx-git::build-check failed"
+            failed=1
+          fi
+          exit "${failed}"
