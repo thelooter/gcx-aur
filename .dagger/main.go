@@ -116,14 +116,29 @@ func (m *Aur) Bump(
 
 	switch pkg {
 	case "gcx-bin":
-		// Pull the official checksums file and slot the per-arch sums straight
-		// in. Computing them by download would skip the foreign arch on an
-		// amd64 runner, so we trust upstream's signed checksum list instead.
+		// Pull the official checksums file and slot the per-arch tarball sums
+		// straight in. Computing them by download would skip the foreign arch
+		// on a single-arch runner, so we trust upstream's checksum list
+		// instead. Trust assumption: the list is fetched over TLS from the
+		// same GitHub release as the tarballs, so a compromised release
+		// would defeat this anyway — there is no separate signature check.
+		// Match the full tarball filename (not just the arch substring) so a
+		// renamed/new asset (e.g. .deb, .zip) fails loudly instead of slotting
+		// the wrong hash. Matched lines are echoed for the build log.
 		script := fmt.Sprintf(`set -euo pipefail
-sums=$(curl -fsSL https://github.com/%s/%s/releases/download/v%s/gcx_%s_checksums.txt)
-amd=$(printf '%%s\n' "$sums" | awk '/linux_amd64/{print $1}')
-arm=$(printf '%%s\n' "$sums" | awk '/linux_arm64/{print $1}')
-test -n "$amd" && test -n "$arm"
+url=https://github.com/%s/%s/releases/download/v%s/gcx_%s_checksums.txt
+echo "Fetching $url"
+sums=$(curl -fsSL "$url")
+printf '%%s\n' "$sums"
+amd=$(printf '%%s\n' "$sums" | awk '$2 ~ /gcx_.*_linux_amd64\.tar\.gz$/ {print $1; exit}')
+arm=$(printf '%%s\n' "$sums" | awk '$2 ~ /gcx_.*_linux_arm64\.tar\.gz$/ {print $1; exit}')
+if [ -z "$amd" ] || [ -z "$arm" ]; then
+  echo "ERROR: expected linux_amd64 and linux_arm64 tarball lines in $url" >&2
+  printf '%%s\n' "$sums" >&2
+  exit 1
+fi
+echo "linux_amd64: $amd"
+echo "linux_arm64: $arm"
 sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$amd')/"  PKGBUILD
 sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$arm')/" PKGBUILD`,
 			ghOwner, ghRepo, version, version)
@@ -132,8 +147,12 @@ sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$arm')/" PKGBUILD`,
 	case "gcx":
 		// Single source tarball: hash it directly, no build artifacts left behind.
 		script := fmt.Sprintf(`set -euo pipefail
-sum=$(curl -fsSL https://github.com/%s/%s/archive/refs/tags/v%s.tar.gz | sha256sum | awk '{print $1}')
+url=https://github.com/%s/%s/archive/refs/tags/v%s.tar.gz
+echo "Hashing $url"
+sum=$(curl -fsSL "$url" | tee /tmp/src.tar.gz | sha256sum | awk '{print $1}')
 test -n "$sum"
+echo "sha256: $sum ($(wc -c < /tmp/src.tar.gz) bytes)"
+rm -f /tmp/src.tar.gz
 sed -i "s/^sha256sums=.*/sha256sums=('$sum')/" PKGBUILD`,
 			ghOwner, ghRepo, version)
 		c = c.WithExec([]string{"bash", "-c", script})
