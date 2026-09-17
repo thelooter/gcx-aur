@@ -18,7 +18,7 @@ prepare() {
 	# Pre-fetch modules so build() can run offline with a read-only source tree.
 	export GOPATH="$srcdir/gopath"
 	export GOFLAGS='-modcacherw'
-	go mod download -x
+	go mod download
 }
 
 build() {
