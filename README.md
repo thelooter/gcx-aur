@@ -41,18 +41,26 @@ shell integration upstream offers, and all three packages install them.
 module under `.dagger/`, so every build runs in a clean, reproducible Arch
 container — identical locally and in CI.
 
-Each run:
+Each run has three jobs:
 
-1. **Checks upstream** for the latest `gcx` release tag.
-2. For `gcx` and `gcx-bin`, if the release is newer than the packaged `pkgver`:
-   bumps `pkgver`, resets `pkgrel`, refreshes the checksums (source tarball hash
-   for `gcx`; the official per-arch `checksums.txt` for `gcx-bin`), and
-   regenerates `.SRCINFO`.
-3. **Verifies the bump builds** with `makepkg` in the container. A bump is only
-   accepted if it builds — a broken release can never be published.
-4. **Build-checks `gcx-git`** against `main` so upstream breakage surfaces early.
-5. **Commits** any changes to this repo and **pushes each changed package to its
-   AUR repository**.
+1. **`update` (matrix: `gcx`, `gcx-bin`)** — each leg checks upstream for the
+   latest release tag and, if newer than the packaged `pkgver`, bumps `pkgver`,
+   resets `pkgrel`, refreshes the checksums (source tarball hash for `gcx`;
+   the official per-arch `checksums.txt` for `gcx-bin`), regenerates
+   `.SRCINFO`, and **verifies the bump builds** with `makepkg` in the
+   container. A bump is only accepted if it builds — a broken release can
+   never be published. `fail-fast: false`, so one broken package never blocks
+   the other; each leg exports its result as an artifact.
+2. **`git-check`** — build-checks `gcx-git` against `main` so upstream
+   breakage surfaces early.
+3. **`publish`** (runs even if 1–2 failed) — overlays whichever artifacts
+   succeeded, **commits** them with a versioned message (built by
+   `dagger call commit-message`), and **pushes each changed package to its
+   AUR repository**. A final gate then fails the run if anything broke, so
+   failures are reported but never block healthy packages.
+
+Orchestration lives in the Dagger module; the workflow file itself is
+deliberately thin (checkout, toolchain, secrets, artifacts, push).
 
 ### Dagger functions
 
@@ -65,6 +73,7 @@ dagger call latest-release                                # newest upstream tag
 dagger call current-pkgver --src=. --pkg=gcx              # packaged version
 dagger call build         --src=. --pkg=gcx-bin           # build in a clean container
 dagger call bump          --src=. --pkg=gcx --version=X   # bump + refresh sums + .SRCINFO
+dagger call commit-message --src=. --pkgs=gcx,gcx-bin     # CI commit message for changed pkgs
 dagger call update        --src=. --pkg=gcx \
   export --path=./gcx                                     # full verified update-in-place
 ```
