@@ -103,10 +103,34 @@ jobs:
           git add gcx gcx-bin gcx-git
           if git diff --cached --quiet; then
             echo "No package changes to commit."
-          else
-            git commit -m "ci: update gcx packages to latest upstream"
-            git push
+            exit 0
           fi
+          # Build a versioned message like
+          # "ci: update gcx packages (gcx 1.3.0-1 -> 1.4.0-1, gcx-bin 1.3.0-1 -> 1.4.0-1)"
+          # so the history shows what actually changed.
+          getver() { bash -c 'source "$1"; printf "%s-%s" "$pkgver" "$pkgrel"' bash "$1"; }
+          parts=()
+          for pkg in gcx gcx-bin gcx-git; do
+            if ! git diff --cached --quiet -- "${pkg}"; then
+              new="$(getver "${pkg}/PKGBUILD")"
+              if old_blob="$(git show "HEAD:${pkg}/PKGBUILD" 2>/dev/null)"; then
+                old="$(bash -c 'source /dev/stdin; printf "%s-%s" "$pkgver" "$pkgrel"' bash <<<"${old_blob}")"
+              else
+                old="none"
+              fi
+              if [[ "${old}" != "${new}" ]]; then
+                parts+=("${pkg} ${old} -> ${new}")
+              else
+                parts+=("${pkg} ${new}")
+              fi
+            fi
+          done
+          joined="$(printf '%s, ' "${parts[@]}")"
+          joined="${joined%, }"
+          msg="ci: update gcx packages (${joined})"
+          echo "Committing: ${msg}"
+          git commit -m "${msg}"
+          git push
 
       # AUR publishing is opt-in: it only runs once you set the repository
       # variable AUR_PUBLISH to "true" (Settings → Secrets and variables →
