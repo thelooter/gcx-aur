@@ -5,16 +5,61 @@
 # copies the tracked package files in, and pushes only when something actually
 # changed. Safe to run every CI invocation — unchanged packages are a no-op.
 #
-# Usage: scripts/aur-sync.sh [pkg ...]   (defaults to all three gcx packages)
+# Usage: scripts/aur-sync.sh [-n|--dry-run] [pkg ...]   (defaults to all three gcx packages)
 set -euo pipefail
 
-packages=("$@")
+usage() {
+	cat <<'EOF'
+Usage: scripts/aur-sync.sh [-n|--dry-run] [-h|--help] [pkg ...]
+
+Sync one or more package folders to their AUR repositories.
+Defaults to all three gcx packages. With --dry-run, show what would
+change without committing or pushing anything.
+EOF
+}
+
+dry_run=0
+packages=()
+for arg in "$@"; do
+	case "${arg}" in
+	-n | --dry-run)
+		dry_run=1
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	-*)
+		echo "unknown option: ${arg}" >&2
+		usage >&2
+		exit 2
+		;;
+	*)
+		packages+=("${arg}")
+		;;
+	esac
+done
 if [[ ${#packages[@]} -eq 0 ]]; then
 	packages=(gcx gcx-bin gcx-git)
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 failed=0
+
+# Track temp dirs so SIGINT/ERR never leaves clones behind.
+tmpdirs=()
+cleanup() {
+	for d in "${tmpdirs[@]:-}"; do
+		[[ -n "${d}" && -d "${d}" ]] && rm -rf "${d}"
+	done
+}
+trap cleanup EXIT
+
+# Read a variable from a PKGBUILD by sourcing it in a clean subshell.
+# More robust than grepping: tolerates quotes, spacing and comments.
+pkgvar() {
+	bash -c 'source "$1"; printf "%s" "${!2}"' bash "$1" "$2"
+}
 
 for pkg in "${packages[@]}"; do
 	echo "::group::AUR sync ${pkg}"
@@ -27,6 +72,7 @@ for pkg in "${packages[@]}"; do
 	fi
 
 	work="$(mktemp -d)"
+	tmpdirs+=("${work}")
 	if ! git clone --quiet "ssh://aur@aur.archlinux.org/${pkg}.git" "${work}"; then
 		echo "warning: could not clone AUR repo for ${pkg}"
 		echo "  (create it with an initial push, and make sure the SSH key is authorized)"
@@ -36,15 +82,22 @@ for pkg in "${packages[@]}"; do
 		continue
 	fi
 
-	# Copy the tracked package files. PKGBUILD and .SRCINFO are mandatory; the
-	# rest are optional and only copied if present.
-	cp "${src}/PKGBUILD" "${src}/.SRCINFO" "${work}/"
-	[[ -f "${src}/.gitignore" ]] && cp "${src}/.gitignore" "${work}/"
-	shopt -s nullglob
-	for extra in "${src}"/*.install "${src}"/*.sysusers "${src}"/*.tmpfiles; do
-		cp "${extra}" "${work}/"
-	done
-	shopt -u nullglob
+	# Copy every git-tracked file under the package dir, preserving relative
+	# paths. New file types (patches, .install, keys, ...) are picked up
+	# automatically; build artifacts are untracked and never copied.
+	while IFS= read -r f; do
+		dest="${work}/${f#${pkg}/}"
+		mkdir -p "$(dirname "${dest}")"
+		cp "${repo_root}/${f}" "${dest}"
+	done < <(git -C "${repo_root}" ls-files -- "${pkg}")
+
+	if [[ ! -f "${work}/PKGBUILD" || ! -f "${work}/.SRCINFO" ]]; then
+		echo "::error title=${pkg}::package dir tracks no PKGBUILD/.SRCINFO"
+		failed=1
+		rm -rf "${work}"
+		echo "::endgroup::"
+		continue
+	fi
 
 	(
 		cd "${work}"
@@ -53,8 +106,13 @@ for pkg in "${packages[@]}"; do
 			echo "${pkg}: AUR already up to date"
 			exit 0
 		fi
-		ver="$(awk -F= '/^pkgver=/{print $2; exit}' PKGBUILD)"
-		rel="$(awk -F= '/^pkgrel=/{print $2; exit}' PKGBUILD)"
+		ver="$(pkgvar PKGBUILD pkgver)"
+		rel="$(pkgvar PKGBUILD pkgrel)"
+		if [[ "${dry_run}" -eq 1 ]]; then
+			echo "${pkg}: dry-run — would commit upgpkg: ${pkg} ${ver}-${rel}"
+			git diff --cached --stat
+			exit 0
+		fi
 		git commit --quiet -m "upgpkg: ${pkg} ${ver}-${rel}"
 		# Push to the AUR's canonical `master` branch regardless of the local
 		# branch name — a freshly cloned *empty* repo checks out the client's
