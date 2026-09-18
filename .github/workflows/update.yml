@@ -38,11 +38,11 @@ jobs:
       fail-fast: false
       matrix:
         pkg: [gcx, gcx-bin]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Install Dagger CLI
         # Install-only: with no call/verb inputs the action just installs the
@@ -77,18 +77,18 @@ jobs:
             export --path="./out"
 
       - name: Upload updated package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ matrix.pkg }}
           path: out/
           if-no-files-found: error
 
   git-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Install Dagger CLI
         # Install-only: with no call/verb inputs the action just installs the
@@ -117,11 +117,11 @@ jobs:
     # Run even when a leg failed so successful bumps still get published; the
     # final gate step reports the failures afterwards.
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -139,7 +139,7 @@ jobs:
         # A missing artifact means that leg failed — it must not stop the
         # packages that did succeed from being committed.
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.1
         with:
           pattern: '{gcx,gcx-bin}'
           path: ./
