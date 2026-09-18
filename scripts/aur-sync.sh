@@ -48,9 +48,13 @@ failed=0
 
 # Track temp dirs so SIGINT/ERR never leaves clones behind.
 tmpdirs=()
+# Must end on a success status: a failing last command here (e.g. a false
+# `[[ -d ]]` for an already-removed dir) becomes the script's exit code.
 cleanup() {
 	for d in "${tmpdirs[@]:-}"; do
-		[[ -n "${d}" && -d "${d}" ]] && rm -rf "${d}"
+		if [[ -n "${d}" && -d "${d}" ]]; then
+			rm -rf "${d}"
+		fi
 	done
 }
 trap cleanup EXIT
