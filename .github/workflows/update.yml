@@ -82,6 +82,9 @@ jobs:
           name: ${{ matrix.pkg }}
           path: out/
           if-no-files-found: error
+          # .SRCINFO is a dotfile; without this it is silently dropped and the
+          # AUR keeps advertising the old version.
+          include-hidden-files: true
 
   git-check:
     runs-on: ubuntu-24.04
