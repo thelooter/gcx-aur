@@ -206,6 +206,42 @@ sed -i "s/^sha256sums=.*/sha256sums=('$sum')/" PKGBUILD`,
 	return c.Directory("/home/builder/pkg"), nil
 }
 
+// UpdateGit build-checks the VCS package (gcx-git) and, when the nearest
+// upstream release tag has moved since the declared pkgver, returns the
+// package with pkgver (as rewritten by makepkg's pkgver()) and .SRCINFO
+// refreshed. Otherwise it returns the folder unchanged, so a new upstream
+// commit alone never triggers an AUR push. Errors if the build fails.
+func (m *Aur) UpdateGit(ctx context.Context, src *dagger.Directory) (*dagger.Directory, error) {
+	const pkg = "gcx-git"
+	built := m.pkgDir(src, pkg).
+		WithExec([]string{"makepkg", "--noconfirm", "--syncdeps", "--cleanbuild", "--force"}).
+		WithExec([]string{"sed", "-i", "s/^[[:space:]]*pkgrel[[:space:]]*=.*/pkgrel=1/", "PKGBUILD"}).
+		WithExec([]string{"bash", "-c", "makepkg --printsrcinfo > .SRCINFO"})
+
+	current, err := m.CurrentPkgver(ctx, src, pkg)
+	if err != nil {
+		return nil, err
+	}
+	content, err := built.File("PKGBUILD").Contents(ctx)
+	if err != nil {
+		return nil, err
+	}
+	latest, err := pkgField(content, "pkgver")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", pkg, err)
+	}
+
+	// 1.7.1.r1.g9b403e7 -> 1.7.1: only a new release tag is worth publishing.
+	curTag, _, _ := strings.Cut(current, ".r")
+	newTag, _, _ := strings.Cut(latest, ".r")
+	if curTag == newTag {
+		return src.Directory(pkg), nil
+	}
+	return src.Directory(pkg).
+		WithFile("PKGBUILD", built.File("PKGBUILD")).
+		WithFile(".SRCINFO", built.File(".SRCINFO")), nil
+}
+
 // Update is the full auto-update path for a release-tracking package (gcx or
 // gcx-bin). It compares the current pkgver against the latest upstream release;
 // if they match it returns the package unchanged. Otherwise it bumps, then

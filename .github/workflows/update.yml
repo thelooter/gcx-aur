@@ -3,7 +3,8 @@ name: Update AUR packages
 # Checks upstream gcx for a new release once a day (and on demand). The two
 # release-tracking packages (gcx, gcx-bin) update in parallel matrix legs,
 # each verified by building in a clean Arch container via Dagger; the VCS
-# package (gcx-git) is build-checked so breakage surfaces early. A combine job
+# package (gcx-git) is build-checked so breakage surfaces early, and its
+# pkgver is refreshed whenever upstream cuts a new release tag. A combine job
 # then commits whatever changed and pushes each package to its AUR repository.
 #
 # Design: orchestration lives in the Dagger module (.dagger/main.go) — version
@@ -113,7 +114,17 @@ jobs:
         run: dagger develop
 
       - name: Build-check gcx-git
-        run: dagger call build --src=. --pkg=gcx-git
+        # Returns the package with pkgver/.SRCINFO refreshed when upstream cut
+        # a new release since the declared pkgver; unchanged otherwise.
+        run: dagger call update-git --src=. export --path="./out"
+
+      - name: Upload updated package
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: gcx-git
+          path: out/
+          if-no-files-found: error
+          include-hidden-files: true
 
   publish:
     needs: [update, git-check]
@@ -144,7 +155,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v8.0.1
         with:
-          pattern: '{gcx,gcx-bin}'
+          pattern: '{gcx,gcx-bin,gcx-git}'
           path: ./
 
       - name: Configure git identity
@@ -158,12 +169,12 @@ jobs:
 
       - name: Commit version bumps
         run: |
-          git add gcx gcx-bin
+          git add gcx gcx-bin gcx-git
           if git diff --cached --quiet; then
             echo "No package changes to commit."
             exit 0
           fi
-          changed="$(for p in gcx gcx-bin; do git diff --cached --quiet -- "$p" || printf '%s,' "$p"; done)"
+          changed="$(for p in gcx gcx-bin gcx-git; do git diff --cached --quiet -- "$p" || printf '%s,' "$p"; done)"
           # Parsing and formatting live in the Dagger module — this shell only
           # detects *which* packages changed, which is inherently git state.
           msg="$(dagger call commit-message --src=. --pkgs="${changed%,}")"
